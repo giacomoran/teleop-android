@@ -14,7 +14,9 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import com.giacomoran.teleop.ui.FPSMeter
+import com.giacomoran.teleop.ui.ControlPad
+import com.giacomoran.teleop.ui.ControlPadOutput
+import com.giacomoran.teleop.ui.StatusBar
 import com.giacomoran.teleop.ui.theme.TeleopTheme
 import com.giacomoran.teleop.util.ARCoreSessionManager
 import kotlinx.coroutines.delay
@@ -71,6 +73,9 @@ fun ARScreen(sessionManager: ARCoreSessionManager) {
         showTrackingMessage = false
     }
 
+    // Handle control pad output (placeholder for future robot control)
+    var controlOutput by remember { mutableStateOf<ControlPadOutput?>(null) }
+
     Scaffold(
         modifier = Modifier.fillMaxSize()
     ) { paddingValues ->
@@ -90,125 +95,57 @@ fun ARScreen(sessionManager: ARCoreSessionManager) {
                 modifier = Modifier.fillMaxSize()
             )
 
-            // ARCore Tracking Meter centered on screen
-            FPSMeter(
-                updatesPerSecond = trackingState.updatesPerSecond,
-                cameraTrackingState = trackingState.cameraTrackingState,
-                isStalled = trackingState.isStalled,
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .padding(16.dp)
-            )
-
-            // Tracking message overlay
-            if (showTrackingMessage) {
-                Card(
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(16.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer
-                    )
-                ) {
-                    Text(
-                        text = "Slowly move your phone around to improve tracking",
-                        modifier = Modifier.padding(16.dp),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                }
-            }
-
-            // Pose information display
+            // Main content column
             Column(
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier.fillMaxSize()
             ) {
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                // Status bar at the top
+                StatusBar(
+                    poseState = poseState,
+                    trackingState = trackingState,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                // Tracking message overlay (temporary, shown for first 5 seconds)
+                if (showTrackingMessage) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer
+                        )
                     ) {
                         Text(
-                            text = "6DoF Tracking",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
+                            text = "Slowly move your phone around to improve tracking",
+                            modifier = Modifier.padding(16.dp),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
                         )
-
-                        when (val state = poseState) {
-                            is ARCoreSessionManager.PoseState.Initializing -> {
-                                Text(
-                                    text = "Initializing tracking...",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            is ARCoreSessionManager.PoseState.Tracking -> {
-                                Text(
-                                    text = "Tracking...",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            is ARCoreSessionManager.PoseState.Pose -> {
-                                // Position (x, y, z)
-                                Text(
-                                    text = "Position:",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Text(
-                                    text = "  X: ${formatFloat(state.position[0])}\n" +
-                                           "  Y: ${formatFloat(state.position[1])}\n" +
-                                           "  Z: ${formatFloat(state.position[2])}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontFamily = FontFamily.Monospace,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-
-                                Spacer(modifier = Modifier.height(4.dp))
-
-                                // Orientation (quaternion: w, x, y, z)
-                                Text(
-                                    text = "Orientation (Quaternion):",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Text(
-                                    text = "  W: ${formatFloat(state.quaternion[0])}\n" +
-                                           "  X: ${formatFloat(state.quaternion[1])}\n" +
-                                           "  Y: ${formatFloat(state.quaternion[2])}\n" +
-                                           "  Z: ${formatFloat(state.quaternion[3])}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontFamily = FontFamily.Monospace,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-                            is ARCoreSessionManager.PoseState.Error -> {
-                                Text(
-                                    text = "Error: ${state.message}",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.error
-                                )
-                            }
-                        }
                     }
+                }
+
+                // Control pad - aligned to bottom with small margins
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .weight(1f),
+                    contentAlignment = Alignment.BottomCenter
+                ) {
+                    ControlPad(
+                        onControlChange = { output ->
+                            controlOutput = output
+                            // TODO: Send control commands to robot
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(1f)
+                            .padding(horizontal = 8.dp, vertical = 8.dp)
+                    )
                 }
             }
         }
     }
 }
 
-/**
- * Format float to 3 decimal places for display
- */
-private fun formatFloat(value: Float): String {
-    return String.format("%.3f", value)
-}
 

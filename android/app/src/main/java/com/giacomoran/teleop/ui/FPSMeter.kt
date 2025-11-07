@@ -1,6 +1,5 @@
 package com.giacomoran.teleop.ui
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -17,11 +16,8 @@ import com.google.ar.core.TrackingState
 /**
  * ARCore Tracking Meter component that displays:
  * - ARCore updates per second (not rendering FPS)
- * - Real-time tracking status (TRACKING/PAUSED/STOPPED)
+ * - Real-time tracking status with clear labels
  * - Stall detection (when ARCore stops providing updates)
- *
- * This meter helps detect when ARCore stalls in tracking,
- * which is critical for teleoperation use cases.
  */
 @Composable
 fun FPSMeter(
@@ -30,66 +26,37 @@ fun FPSMeter(
     isStalled: Boolean,
     modifier: Modifier = Modifier
 ) {
-    Box(
-        modifier = modifier
-            .background(
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
-            )
-            .padding(horizontal = 10.dp, vertical = 6.dp)
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Updates per second display
-                Text(
-                    text = "${updatesPerSecond.toInt()} Hz",
-                    fontSize = 12.sp,
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Bold,
-                    color = when {
-                        isStalled -> Color(0xFFF44336) // Red when stalled
-                        updatesPerSecond >= 55f -> Color(0xFF4CAF50) // Green when good (close to 60)
-                        updatesPerSecond >= 30f -> Color(0xFFFFC107) // Yellow when moderate
-                        else -> Color(0xFFF44336) // Red when poor
-                    }
-                )
+        // Updates per second display - use neutral colors
+        Text(
+            text = "${updatesPerSecond.toInt()} Hz",
+            fontSize = 12.sp,
+            fontFamily = FontFamily.Monospace,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            lineHeight = 14.4.sp
+        )
 
-                // Tracking status indicator
-                val trackingStatusText = when (cameraTrackingState) {
-                    TrackingState.TRACKING -> "TRACKING"
-                    TrackingState.PAUSED -> "PAUSED"
-                    TrackingState.STOPPED -> "STOPPED"
-                }
-
-                Text(
-                    text = trackingStatusText,
-                    fontSize = 10.sp,
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Medium,
-                    color = when (cameraTrackingState) {
-                        TrackingState.TRACKING -> Color(0xFF4CAF50) // Green
-                        TrackingState.PAUSED -> Color(0xFFFFC107) // Yellow
-                        TrackingState.STOPPED -> Color(0xFFF44336) // Red
-                    }
-                )
-
-                // Stall indicator
-                if (isStalled) {
-                    Text(
-                        text = "STALLED",
-                        fontSize = 10.sp,
-                        fontFamily = FontFamily.Monospace,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFFF44336)
-                    )
-                }
-            }
+        // Tracking status with clear label
+        val (statusLabel, statusColor) = when {
+            isStalled -> "Stalled" to Color(0xFFF44336)
+            cameraTrackingState == TrackingState.TRACKING -> "Camera Active" to Color(0xFF4CAF50)
+            cameraTrackingState == TrackingState.PAUSED -> "Camera Paused" to Color(0xFFFFC107)
+            else -> "Camera Stopped" to Color(0xFFF44336)
         }
+
+        Text(
+            text = statusLabel,
+            fontSize = 12.sp,
+            fontFamily = FontFamily.Default,
+            fontWeight = FontWeight.Medium,
+            color = statusColor,
+            lineHeight = 14.4.sp
+        )
     }
 }
 
