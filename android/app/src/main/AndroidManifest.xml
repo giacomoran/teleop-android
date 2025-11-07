@@ -2,6 +2,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <uses-feature android:name="android.hardware.camera" android:required="true" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="true" />
+    <uses-feature android:name="android.hardware.camera.ar" />
+
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -22,6 +28,17 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity
+            android:name=".RequirementsActivity"
+            android:exported="false"
+            android:label="AR Requirements"
+            android:theme="@style/Theme.Teleop" />
+        <activity
+            android:name=".ARActivity"
+            android:exported="false"
+            android:label="AR"
+            android:theme="@style/Theme.Teleop" />
+        <meta-data android:name="com.google.ar.core" android:value="required" />
     </application>
 
 </manifest>
