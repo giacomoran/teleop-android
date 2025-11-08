@@ -8,8 +8,6 @@
 # - After initialization, the world X/Y/Z axes are fixed in space; they do not rotate
 #   with the phone. The phone's camera pose moves/rotates within this fixed frame.
 
-import math
-
 import numpy as np
 import rerun as rr
 import transforms3d as t3d
@@ -63,30 +61,8 @@ blueprint = rrb.Horizontal(
 
 rr.init("test_teleop", spawn=True, default_blueprint=blueprint)
 
-#: Initial pose
-
-position_initial = [0, 0, 0]
-orientation_euler_initial = [0, math.radians(-45), 0]
-
-pose_initial = t3d.affines.compose(
-    position_initial,
-    t3d.euler.euler2mat(*orientation_euler_initial, axes="sxyz"),
-    [1, 1, 1],
-)
-
-orientation_quaternion_wxyz_initial = t3d.quaternions.mat2quat(pose_initial[:3, :3])
-orientation_quaternion_xyzw_initial = (
-    TF_WXYZ_TO_XYZW @ orientation_quaternion_wxyz_initial
-)
-
-rr.log(
-    "/world",
-    rr.Transform3D(
-        translation=position_initial,
-        quaternion=rr.Quaternion(xyzw=orientation_quaternion_xyzw_initial),
-    ),
-    static=True,
-)
+# Set FLU coordinate system
+rr.log("/", rr.ViewCoordinates.FLU, static=True)
 
 # Create a pinhole camera with no images to aid visualizations
 rr.log(
@@ -95,6 +71,7 @@ rr.log(
         focal_length=(500.0, 500.0),
         resolution=(640, 480),
         image_plane_distance=0.5,
+        camera_xyz=rr.ViewCoordinates.FLU,
     ),
     static=True,
 )
@@ -104,12 +81,7 @@ rr.log(
 
 
 def callback(message: dict) -> None:
-    """
-    Callback function triggered when pose updates are received.
-
-    Arguments:
-        - dict: A dictionary containing position, orientation, and fps information.
-    """
+    # Data from ARCore is in RUB coordinate system
     position_rub = message["position"]
     orientation_rub = message["orientation"]
     position_rub = np.array([position_rub["x"], position_rub["y"], position_rub["z"]])
@@ -122,38 +94,32 @@ def callback(message: dict) -> None:
         ]
     )
     orientation_rub_quaternion_wxyz = TF_XYZW_TO_WXYZ @ orientation_rub_quaternion_xyzw
+    rotation_rub = t3d.quaternions.quat2mat(orientation_rub_quaternion_wxyz)
 
-    pose_rub = t3d.affines.compose(
-        position_rub,
-        t3d.quaternions.quat2mat(orientation_rub_quaternion_wxyz),
-        [1, 1, 1],
-    )
-
-    # Change of basis for the rotation matrix in pose R' = C R C^{-1}
-    pose = TF_RUB2FLU @ pose_rub
-    pose[:3, :3] = pose[:3, :3] @ np.linalg.inv(TF_RUB2FLU[:3, :3])
-
-    # Correct for initial phone orientation
-    pose = pose @ pose_initial
+    # Transform data RUB to FLU coordinate system, to plot time series
+    tf_rub2flu_rotation = TF_RUB2FLU[:3, :3]
+    rotation_flu = tf_rub2flu_rotation @ rotation_rub @ tf_rub2flu_rotation.T
+    position_flu = tf_rub2flu_rotation @ position_rub
+    pose_flu = t3d.affines.compose(position_flu, rotation_flu, [1, 1, 1])
 
     # forward, left, up -> roll, pitch, yaw
-    orientation_euler = np.degrees(
-        np.array(t3d.euler.mat2euler(pose[:3, :3], axes="sxyz"))
+    orientation_flu_euler = np.degrees(
+        np.array(t3d.euler.mat2euler(pose_flu[:3, :3], axes="sxyz"))
     )
-    orientation_quaternion_wxyz = t3d.quaternions.mat2quat(pose[:3, :3])
-    orientation_quaternion_xyzw = TF_WXYZ_TO_XYZW @ orientation_quaternion_wxyz
+    orientation_flu_quaternion_wxyz = t3d.quaternions.mat2quat(pose_flu[:3, :3])
+    orientation_flu_quaternion_xyzw = TF_WXYZ_TO_XYZW @ orientation_flu_quaternion_wxyz
 
-    rr.log("/position", rr.Scalars(pose[:3, 3]))
-    rr.log("/orientation", rr.Scalars(orientation_euler))
+    rr.log("/position", rr.Scalars(pose_flu[:3, 3]))
+    rr.log("/orientation", rr.Scalars(orientation_flu_euler))
     rr.log(
         "/world/trajectory-phone",
-        rr.Points3D([pose[:3, 3]]),
+        rr.Points3D([pose_flu[:3, 3]]),
     )
     rr.log(
         "/world/phone",
         rr.Transform3D(
-            translation=pose[:3, 3],
-            rotation=rr.Quaternion(xyzw=orientation_quaternion_xyzw),
+            translation=pose_flu[:3, 3],
+            rotation=rr.Quaternion(xyzw=orientation_flu_quaternion_xyzw),
         ),
     )
 
