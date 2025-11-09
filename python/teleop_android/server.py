@@ -36,18 +36,8 @@ class ConnectionManager:
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
 
-    async def broadcast(self, message: str):
-        """Broadcast a message to all active connections."""
-        for connection in self.active_connections:
-            try:
-                await connection.send_text(message)
-            except Exception:
-                # Remove broken connections
-                if connection in self.active_connections:
-                    self.active_connections.remove(connection)
 
-
-class Teleop:
+class TeleopServer:
     """
     Simple WebSocket server for receiving position and orientation data.
 
@@ -112,10 +102,6 @@ class Teleop:
                         control_data = message.get("data", {})
                         self.__logger.debug(f"Received control data: {control_data}")
                         self.__notify_subscribers(control_data)
-                    elif message.get("type") == "log":
-                        self.__logger.info(
-                            f"Received log message: {message.get('data')}"
-                        )
 
             except WebSocketDisconnect:
                 self.__manager.disconnect(websocket)
@@ -154,18 +140,3 @@ class Teleop:
             ssl_certfile=ssl_certfile,
             ssl_keyfile=ssl_keyfile,
         )
-
-    def stop(self) -> None:
-        """Stop the server."""
-        # FastAPI/uvicorn handles shutdown automatically
-        pass
-
-
-def main():
-    """Main entry point."""
-    teleop = Teleop()
-    teleop.run()
-
-
-if __name__ == "__main__":
-    main()

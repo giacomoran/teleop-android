@@ -192,11 +192,6 @@ private fun ConnectionStatusText(
         is WebSocketClient.ConnectionState.Connecting -> {
             "Connecting..." to Color(0xFFFF9800) // Orange
         }
-        is WebSocketClient.ConnectionState.Error -> {
-            // Don't display error messages in UI - just show disconnected status
-            // Errors are logged instead
-            "Laptop Disconnected" to Color(0xFFF44336) // Red
-        }
         is WebSocketClient.ConnectionState.Disconnected -> {
             "Laptop Disconnected" to Color(0xFFF44336) // Red
         }

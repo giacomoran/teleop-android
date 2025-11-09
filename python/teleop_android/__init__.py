@@ -1,5 +1,3 @@
-"""Teleop package for WebSocket server."""
+from .server import TeleopServer
 
-from .main import Teleop
-
-__all__ = ["Teleop"]
+__all__ = ["TeleopServer"]

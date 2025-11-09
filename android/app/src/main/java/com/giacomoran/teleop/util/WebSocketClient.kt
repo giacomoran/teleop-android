@@ -66,7 +66,6 @@ class WebSocketClient(private val serverIp: String, private val serverPort: Int)
         object Disconnected : ConnectionState()
         object Connecting : ConnectionState()
         object Connected : ConnectionState()
-        data class Error(val message: String) : ConnectionState()
     }
 
     private val listener = object : WebSocketListener() {
@@ -245,24 +244,5 @@ class WebSocketClient(private val serverIp: String, private val serverPort: Int)
         }
     }
 
-    /**
-     * Send a log message to the server.
-     */
-    fun sendLog(message: String) {
-        if (_connectionState.value !is ConnectionState.Connected) {
-            return
-        }
-
-        try {
-            val jsonMessage = JSONObject().apply {
-                put("type", "log")
-                put("data", message)
-            }
-
-            webSocket?.send(jsonMessage.toString())
-        } catch (e: Exception) {
-            Log.e(TAG, "Error sending log message", e)
-        }
-    }
 }
 
