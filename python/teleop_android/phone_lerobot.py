@@ -170,7 +170,7 @@ class MapPhoneActionToRobotAction(RobotActionProcessorStep):
         pos = action.pop("phone.pos")
         # Orientation delta for the phone
         rot = action.pop("phone.rot")
-        inputs = action.pop("phone.raw_inputs")  # noqa: F841 TODO:
+        inputs = action.pop("phone.raw_inputs")
 
         if pos is None or rot is None:
             raise ValueError("pos and rot must be present in action")
@@ -182,16 +182,7 @@ class MapPhoneActionToRobotAction(RobotActionProcessorStep):
         )
         rotvec_identity = Rotation.from_matrix(np.eye(3)).as_rotvec()
 
-        # TODO:
-        # # Map certain inputs to certain actions
-        # if self.platform == PhoneOS.IOS:
-        #     gripper_vel = float(inputs.get("a3", 0.0))
-        # else:
-        #     a = float(inputs.get("reservedButtonA", 0.0))
-        #     b = float(inputs.get("reservedButtonB", 0.0))
-        #     gripper_vel = (
-        #         a - b
-        #     )  # Positive if a is pressed, negative if b is pressed, 0 if both or neither are pressed
+        delta_y_control_pad = float(inputs.get("delta_y_control_pad", 0.0))
 
         action["enabled"] = enabled
         # "target_{x,y,z}" represent a position delta (see EEReferenceAndDelta implementation)
@@ -209,8 +200,11 @@ class MapPhoneActionToRobotAction(RobotActionProcessorStep):
         action["wrist_enabled"] = enabled
         action["wrist_delta_degrees_flex"] = delta_orientation_euler[1]
         action["wrist_delta_degrees_roll"] = delta_orientation_euler[0]
-        # TODO:
-        action["gripper_vel"] = 0.0  # Still send gripper action when disabled
+        # Same as "enabled", store an additional copy for GripperToJoint
+        action["gripper_enabled"] = enabled
+        action["gripper_delta_y_control_pad"] = delta_y_control_pad if enabled else 0.0
+        # Unused but required by other LeRobot processors
+        action["gripper_vel"] = 0.0
         return action
 
     def transform_features(
@@ -227,8 +221,11 @@ class MapPhoneActionToRobotAction(RobotActionProcessorStep):
             "target_wx",
             "target_wy",
             "target_wz",
-            "wrist_enabledwrist_delta_degrees_flex",
+            "wrist_enabled",
+            "wrist_delta_degrees_flex",
             "wrist_delta_degrees_roll",
+            "gripper_enabled",
+            "gripper_delta_y_control_pad",
             "gripper_vel",
         ]:
             features[PipelineFeatureType.ACTION][f"{feat}"] = PolicyFeature(
@@ -326,6 +323,96 @@ class WristJoints(RobotActionProcessorStep):
         return features
 
 
+@ProcessorStepRegistry.register("gripper_to_joint")
+@dataclass
+class GripperToJoint(RobotActionProcessorStep):
+    """
+    TODO:
+    """
+
+    clip_min: float = 0.0
+    clip_max: float = 100.0
+    speed_factor: float = 50.0
+
+    pos_gripper_reference: float | None = field(default=None, init=False, repr=False)
+    _enabled_prev: bool = field(default=False, init=False, repr=False)
+    _pos_gripper_disabled: float | None = field(default=None, init=False, repr=False)
+
+    def action(self, action: RobotAction) -> RobotAction:
+        observation = self.transition.get(TransitionKey.OBSERVATION).copy()
+
+        enabled = bool(action.pop("gripper_enabled"))
+        delta_y_control_pad = float(action.pop("gripper_delta_y_control_pad"))
+        action.pop("ee.gripper_vel")  # Unused
+
+        if observation is None:
+            raise ValueError(
+                "Joints observation is require for computing robot kinematics"
+            )
+
+        pos_gripper = float(observation["gripper.pos"])
+
+        pos_gripper_desired = None
+
+        if enabled:
+            # Latched reference mode: latch reference at the rising edge
+            if not self._enabled_prev or self.pos_gripper_reference is None:
+                self.pos_gripper_reference = pos_gripper
+            pos_gripper_reference = (
+                self.pos_gripper_reference
+                if self.pos_gripper_reference is not None
+                else pos_gripper
+            )
+
+            # Clip the control pad delta to [-1, 1] for safety
+            delta_y_control_pad = float(np.clip(delta_y_control_pad, -1.0, 1.0))
+            # Multiply by speed_factor to convert control pad delta to gripper position delta
+            delta_gripper_pos = delta_y_control_pad * self.speed_factor
+
+            # Add delta to reference position
+            pos_gripper_desired = pos_gripper_reference + delta_gripper_pos
+
+            # Clip between clip_min and clip_max
+            pos_gripper_desired = float(
+                np.clip(pos_gripper_desired, self.clip_min, self.clip_max)
+            )
+
+            self._pos_gripper_disabled = pos_gripper_desired
+        else:
+            # While disabled, keep sending the same command to avoid drift.
+            if self._pos_gripper_disabled is None:
+                # If we've never had an enabled command yet, freeze current position once.
+                self._pos_gripper_disabled = pos_gripper
+            pos_gripper_desired = self._pos_gripper_disabled
+
+        action["ee.gripper_pos"] = pos_gripper_desired
+
+        self._enabled_prev = enabled
+        return action
+
+    def reset(self):
+        """Resets the internal state of the processor."""
+        self.pos_gripper_reference = None
+        self._enabled_prev = False
+        self._pos_gripper_disabled = None
+
+    def transform_features(
+        self, features: dict[PipelineFeatureType, dict[str, PolicyFeature]]
+    ) -> dict[PipelineFeatureType, dict[str, PolicyFeature]]:
+        for feat in [
+            "gripper_enabled",
+            "gripper_delta_y_control_pad",
+            "ee.gripper_vel",
+        ]:
+            features[PipelineFeatureType.ACTION].pop(f"{feat}", None)
+
+        features[PipelineFeatureType.ACTION]["ee.gripper_pos"] = PolicyFeature(
+            type=FeatureType.ACTION, shape=(1,)
+        )
+
+        return features
+
+
 #: Phone
 
 
@@ -347,6 +434,7 @@ class AndroidPhone(BasePhone, Teleoperator):
 
         self._pose_phone_init = None
         self._pose_phone_prev = None
+        self._y_control_pad_init: Optional[float] = None
 
     @property
     def is_connected(self) -> bool:
@@ -410,7 +498,6 @@ class AndroidPhone(BasePhone, Teleoperator):
         self._enabled_prev = self._enabled
         self._enabled = bool(control["isActive"])
         scale = 0.5 if bool(control["isFineControl"]) else 1.0
-        # TODO: Gripper vel
 
         position_rub = np.array(
             [
@@ -432,6 +519,8 @@ class AndroidPhone(BasePhone, Teleoperator):
             orientation_rub_quaternion_wxyz
         )
 
+        control_pad_y = float(control.get("y", 0.0))
+
         # Transform data RUB to FLU coordinate system
         orientation_matrix = (
             TF_RUB2FLU[:3, :3] @ orientation_rub_matrix @ TF_RUB2FLU[:3, :3].T
@@ -445,11 +534,13 @@ class AndroidPhone(BasePhone, Teleoperator):
         # Begin "enabled" phone movement
         if not self._enabled_prev and self._enabled:
             assert self._pose_phone_init is None and self._pose_phone_prev is None
+            assert self._y_control_pad_init is None
 
         # Stop "enabled" phone movement
         if self._enabled_prev and not self._enabled:
             self._pose_phone_init = None
             self._pose_phone_prev = None
+            self._y_control_pad_init = None
             # Note that self._pose_robot is retained, we need to keep track of it across
             # disjoint phone movements
             return RESULT_NOT_ENABLED
@@ -468,6 +559,7 @@ class AndroidPhone(BasePhone, Teleoperator):
                 logger.warning("Pose jump detected, resetting the pose")
                 self._pose_phone_init = None
                 self._pose_phone_prev = pose_phone
+                self._y_control_pad_init = None
                 # Note that self._pose_robot is retained, we need to keep track of it across
                 # disjoint phone movements
                 return RESULT_NOT_ENABLED
@@ -479,10 +571,16 @@ class AndroidPhone(BasePhone, Teleoperator):
         if self._pose_phone_init is None:
             self._pose_phone_init = pose_phone
 
+        # Latch control pad y reference when enabled starts
+        if self._y_control_pad_init is None:
+            self._y_control_pad_init = float(control.get("y", 0.0))
+
         ##: Compute robot phone
 
         delta_position = pose_phone[:3, 3] - self._pose_phone_init[:3, 3]
         delta_orientation = pose_phone[:3, :3] @ self._pose_phone_init[:3, :3].T
+
+        delta_y_control_pad = control_pad_y - self._y_control_pad_init
 
         if scale < 1.0:
             self._pose_robot = interpolate_transforms(
@@ -496,7 +594,8 @@ class AndroidPhone(BasePhone, Teleoperator):
         rot = Rotation.from_quat(rot_quaternion_xyzw)
         pos = delta_position
 
-        raw_inputs = control
+        raw_inputs = control.copy()
+        raw_inputs["delta_y_control_pad"] = delta_y_control_pad
 
         assert self._enabled
         return {

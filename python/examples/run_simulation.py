@@ -22,12 +22,17 @@ from lerobot.processor.converters import (
 from lerobot.robots.so100_follower.robot_kinematic_processor import (
     EEBoundsAndSafety,
     EEReferenceAndDelta,
-    GripperVelocityToJoint,
     InverseKinematicsEEToJoints,
 )
 from lerobot.teleoperators.phone.config_phone import PhoneConfig, PhoneOS
 from rerun import blueprint as rrb
-from teleop_android import AndroidPhone, MapPhoneActionToRobotAction, Pose, WristJoints
+from teleop_android import (
+    AndroidPhone,
+    GripperToJoint,
+    MapPhoneActionToRobotAction,
+    Pose,
+    WristJoints,
+)
 
 #: Constants
 
@@ -65,7 +70,7 @@ MOTOR_TO_RERUN = {
     },
     "gripper": {
         "path": "/world_robot/so101_new_calib/base_link/shoulder_pan/shoulder_link/shoulder_lift/upper_arm_link/elbow_flex/lower_arm_link/wrist_flex/wrist_link/wrist_roll/gripper_link/gripper",
-        "axis": [0, 1, 0],
+        "axis": [0, -1, 0],
         "pos_init": 1.1019283746556474,
     },
 }
@@ -162,9 +167,7 @@ phone_to_robot_joints_processor = RobotProcessorPipeline[
             end_effector_bounds={"min": [-1.0, -1.0, -1.0], "max": [1.0, 1.0, 1.0]},
             max_ee_step_m=0.50,
         ),
-        GripperVelocityToJoint(
-            speed_factor=20.0,
-        ),
+        GripperToJoint(clip_min=-5.0, clip_max=95.0),
         InverseKinematicsEEToJoints(
             kinematics=kinematics_solver,
             motor_names=list(MOTOR_TO_RERUN.keys()),
