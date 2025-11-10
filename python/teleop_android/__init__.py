@@ -1,5 +1,7 @@
-from .phone_lerobot import (
+from .lerobot_phone import (
     AndroidPhone,
+)
+from .lerobot_processors import (
     GripperToJoint,
     MapPhoneActionToRobotAction,
     WristJoints,
