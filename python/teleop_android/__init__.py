@@ -1,7 +1,4 @@
-from .phone_lerobot import (
-    AndroidPhone,
-    MapPhoneActionToRobotAction,
-)
+from .phone_lerobot import AndroidPhone, MapPhoneActionToRobotAction, WristJoints
 from .server import (
     Control,
     Orientation,
@@ -18,4 +15,5 @@ __all__ = [
     "Pose",
     "Position",
     "TeleopServer",
+    "WristJoints",
 ]

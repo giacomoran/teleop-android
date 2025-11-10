@@ -16,7 +16,6 @@ from lerobot.robots.so100_follower.robot_kinematic_processor import (
 )
 from lerobot.robots.so100_follower.so100_follower import SO100Follower
 from lerobot.teleoperators.phone.config_phone import PhoneConfig, PhoneOS
-from lerobot.teleoperators.phone.teleop_phone import Rotation
 from lerobot.utils.robot_utils import busy_wait
 from lerobot.utils.visualization_utils import init_rerun, log_rerun_data
 from teleop_android import AndroidPhone, MapPhoneActionToRobotAction
@@ -25,6 +24,10 @@ from teleop_android import AndroidPhone, MapPhoneActionToRobotAction
 
 
 FPS = 30
+
+PATH_URDF = "../../setup-arm/SO-ARM100/Simulation/SO101/so101_new_calib.urdf"
+
+#:
 
 # Initialize the robot
 robot_config = SO100FollowerConfig(
@@ -39,7 +42,7 @@ teleop_device = AndroidPhone(config=teleop_config)
 
 # NOTE: It is highly recommended to use the urdf in the SO-ARM100 repo: https://github.com/TheRobotStudio/SO-ARM100/blob/main/Simulation/SO101/so101_new_calib.urdf
 kinematics_solver = RobotKinematics(
-    urdf_path="../../setup-arm/SO-ARM100/Simulation/SO101/so101_new_calib.urdf",
+    urdf_path=PATH_URDF,
     target_frame_name="gripper_frame_link",
     joint_names=list(robot.bus.motors.keys()),
 )
@@ -82,30 +85,6 @@ init_rerun(session_name="phone_so101_teleop")
 
 if not robot.is_connected or not teleop_device.is_connected:
     raise ValueError("Robot or teleop is not connected!")
-
-# robot_obs = {
-#     "shoulder_pan.pos": -8.835164835164836,
-#     "shoulder_lift.pos": -102.37362637362638,
-#     "elbow_flex.pos": 97.0989010989011,
-#     "wrist_flex.pos": 64.21978021978022,
-#     "wrist_roll.pos": -2.241758241758242,
-#     "gripper.pos": 1.1019283746556474,
-# }
-
-# pos = np.array([0.02, 0.02, 0])
-# rot = Rotation.from_matrix(np.eye(3))
-
-# phone_obs = {
-#     "phone.enabled": True,
-#     "phone.pos": pos,
-#     "phone.rot": rot,
-#     "phone.raw_inputs": {},
-# }
-
-# joint_action = phone_to_robot_joints_processor((phone_obs, robot_obs))
-
-# print("Joint action")
-# print(joint_action)
 
 print("Starting teleop loop. Move your phone to teleoperate the robot...")
 while True:
