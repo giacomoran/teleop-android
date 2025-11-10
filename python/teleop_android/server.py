@@ -2,10 +2,35 @@ import json
 import logging
 import socket
 from pathlib import Path
-from typing import Callable, Dict, List
+from typing import Callable, List, TypedDict
 
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+
+
+class Position(TypedDict):
+    x: float
+    y: float
+    z: float
+
+
+class Orientation(TypedDict):
+    x: float
+    y: float
+    z: float
+    w: float
+
+
+class Pose(TypedDict):
+    position: Position
+    orientation: Orientation
+
+
+class Control(TypedDict):
+    x: float
+    y: float
+    isFineControl: bool
+    isActive: bool
 
 
 def get_local_ip() -> str:
@@ -53,7 +78,8 @@ class TeleopServer:
 
         self.__host = host
         self.__port = port
-        self.__callbacks: List[Callable[[Dict], None]] = []
+        self.__pose_callbacks: List[Callable[[Pose], None]] = []
+        self.__control_callbacks: List[Callable[[Control], None]] = []
 
         self.__app = FastAPI()
         self.__manager = ConnectionManager()
@@ -63,23 +89,41 @@ class TeleopServer:
 
         self.__setup_routes()
 
-    def subscribe(self, callback: Callable[[Dict], None]) -> None:
+    def subscribe_pose(self, callback: Callable[[Pose], None]) -> None:
         """
         Subscribe to receive updates when pose data is received.
 
         Args:
             callback: A function that will be called with pose data.
-                The callback receives a dict with 'position' and 'orientation' keys.
+                The callback receives a PoseData dict with 'position' and 'orientation' keys.
         """
-        self.__callbacks.append(callback)
+        self.__pose_callbacks.append(callback)
 
-    def __notify_subscribers(self, data: Dict):
-        """Notify all subscribers with the received data."""
-        for callback in self.__callbacks:
+    def subscribe_control(self, callback: Callable[[Control], None]) -> None:
+        """
+        Subscribe to receive updates when control data is received.
+
+        Args:
+            callback: A function that will be called with control data.
+                The callback receives a ControlData dict with 'x', 'y', 'isFineControl', and 'isActive' keys.
+        """
+        self.__control_callbacks.append(callback)
+
+    def __notify_pose_subscribers(self, data: Pose):
+        """Notify all pose subscribers with the received data."""
+        for callback in self.__pose_callbacks:
             try:
                 callback(data)
             except Exception as e:
-                self.__logger.error(f"Error in subscriber callback: {e}")
+                self.__logger.error(f"Error in pose callback: {e}")
+
+    def __notify_control_subscribers(self, data: Control):
+        """Notify all control subscribers with the received data."""
+        for callback in self.__control_callbacks:
+            try:
+                callback(data)
+            except Exception as e:
+                self.__logger.error(f"Error in control callback: {e}")
 
     def __setup_routes(self):
         """Set up FastAPI routes."""
@@ -95,13 +139,13 @@ class TeleopServer:
                     message = json.loads(data)
 
                     if message.get("type") == "pose":
-                        pose_data = message.get("data", {})
+                        pose_data: Pose = message.get("data", {})
                         self.__logger.debug(f"Received pose data: {pose_data}")
-                        self.__notify_subscribers(pose_data)
+                        self.__notify_pose_subscribers(pose_data)
                     elif message.get("type") == "control":
-                        control_data = message.get("data", {})
+                        control_data: Control = message.get("data", {})
                         self.__logger.debug(f"Received control data: {control_data}")
-                        self.__notify_subscribers(control_data)
+                        self.__notify_control_subscribers(control_data)
 
             except WebSocketDisconnect:
                 self.__manager.disconnect(websocket)

@@ -12,7 +12,7 @@ import numpy as np
 import rerun as rr
 import transforms3d as t3d
 from rerun import blueprint as rrb
-from teleop_android import Teleop
+from teleop_android import Pose, TeleopServer
 
 #: Constants
 
@@ -80,7 +80,7 @@ rr.log(
 #: Pose Updates
 
 
-def callback(message: dict) -> None:
+def callback(message: Pose) -> None:
     # Data from ARCore is in RUB coordinate system
     position_rub = message["position"]
     orientation_rub = message["orientation"]
@@ -94,13 +94,15 @@ def callback(message: dict) -> None:
         ]
     )
     orientation_rub_quaternion_wxyz = TF_XYZW_TO_WXYZ @ orientation_rub_quaternion_xyzw
-    rotation_rub = t3d.quaternions.quat2mat(orientation_rub_quaternion_wxyz)
+    orientation_rub_matrix = t3d.quaternions.quat2mat(orientation_rub_quaternion_wxyz)
 
     # Transform data RUB to FLU coordinate system, to plot time series
-    tf_rub2flu_rotation = TF_RUB2FLU[:3, :3]
-    rotation_flu = tf_rub2flu_rotation @ rotation_rub @ tf_rub2flu_rotation.T
-    position_flu = tf_rub2flu_rotation @ position_rub
-    pose_flu = t3d.affines.compose(position_flu, rotation_flu, [1, 1, 1])
+    tf_rub2flu_orientation = TF_RUB2FLU[:3, :3]
+    orientation_flu_matrix = (
+        tf_rub2flu_orientation @ orientation_rub_matrix @ tf_rub2flu_orientation.T
+    )
+    position_flu = tf_rub2flu_orientation @ position_rub
+    pose_flu = t3d.affines.compose(position_flu, orientation_flu_matrix, [1, 1, 1])
 
     # forward, left, up -> roll, pitch, yaw
     orientation_flu_euler = np.degrees(
@@ -112,7 +114,7 @@ def callback(message: dict) -> None:
     rr.log("/position", rr.Scalars(pose_flu[:3, 3]))
     rr.log("/orientation", rr.Scalars(orientation_flu_euler))
     rr.log(
-        "/world/trajectory-phone",
+        "/world/trajectory_phone",
         rr.Points3D([pose_flu[:3, 3]]),
     )
     rr.log(
@@ -124,6 +126,6 @@ def callback(message: dict) -> None:
     )
 
 
-teleop = Teleop()
-teleop.subscribe(callback)
+teleop = TeleopServer()
+teleop.subscribe_pose(callback)
 teleop.run()

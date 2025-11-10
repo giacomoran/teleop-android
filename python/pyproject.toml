@@ -3,7 +3,11 @@ name = "teleop_android"
 version = "0.1.0"
 description = "Start a WebSocket server for listening for the phone's position/orientation from an Android device."
 requires-python = ">=3.13"
-dependencies = ["fastapi>=0.121.0", "uvicorn[standard]>=0.38.0"]
+dependencies = [
+    "fastapi>=0.121.0",
+    "lerobot[feetech,phone]>=0.4.0",
+    "uvicorn[standard]>=0.38.0",
+]
 
 [build-system]
 requires = ["hatchling"]
