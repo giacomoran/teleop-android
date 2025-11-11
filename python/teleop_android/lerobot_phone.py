@@ -1,6 +1,4 @@
-# The code here has been modified from LeRobot phone teleoperation implementation,
-# the goal is to make the Android app compatible with LeRoboot.
-# REFS: https://github.com/huggingface/lerobot/tree/main/src/lerobot/teleoperators/phone
+# REFS: https://github.com/huggingface/lerobot/blob/main/src/lerobot/teleoperators/phone/teleop_phone.py
 
 import copy
 import logging
@@ -29,7 +27,6 @@ logger = logging.getLogger(__name__)
 #:
 
 
-# TODO: Review comments and log messages
 class AndroidPhone(BasePhone, Teleoperator):
     name = "android_phone"
 
@@ -45,8 +42,12 @@ class AndroidPhone(BasePhone, Teleoperator):
         self._pose_android: Optional[Pose] = None
         self._control_android: Optional[Control] = None
 
+        # Store initial phone pose when user starts touching (used as reference for relative movement)
+        # Reset to None when user stops touching or when pose jump is detected
         self._pose_phone_init = None
         self._pose_phone_prev = None
+        # Store initial control pad Y position to calculate relative gripper movement
+        # Reset to None when user stops touching or when pose jump is detected
         self._y_control_pad_init: Optional[float] = None
 
     @property
@@ -88,7 +89,6 @@ class AndroidPhone(BasePhone, Teleoperator):
             self._pose_android = None
             self._control_android = None
 
-    # TODO: Document that LeRobot expects FLU coordinate system
     def get_action(self) -> dict:
         RESULT_NOT_ENABLED = {
             "phone.enabled": False,
@@ -134,12 +134,13 @@ class AndroidPhone(BasePhone, Teleoperator):
 
         control_pad_y = float(control.get("y", 0.0))
 
-        # Transform data RUB to FLU coordinate system
+        # Transform RUB (used by ARCore) to FLU (used by LeRobot) coordinate system
         orientation_matrix = (
             TF_RUB2FLU[:3, :3] @ orientation_rub_matrix @ TF_RUB2FLU[:3, :3].T
         )
         position = TF_RUB2FLU[:3, :3] @ position_rub
 
+        # Create 4x4 pose matrix, combining position, orientation, and scale
         pose_phone = t3d.affines.compose(position, orientation_matrix, [1, 1, 1])
 
         ##: Handle edge cases
@@ -158,6 +159,7 @@ class AndroidPhone(BasePhone, Teleoperator):
             # disjoint phone movements
             return RESULT_NOT_ENABLED
 
+        # Already not "enabled"
         if not self._enabled_prev and not self._enabled:
             return RESULT_NOT_ENABLED
 
@@ -188,7 +190,7 @@ class AndroidPhone(BasePhone, Teleoperator):
         if self._y_control_pad_init is None:
             self._y_control_pad_init = float(control.get("y", 0.0))
 
-        ##: Compute robot phone
+        ##: Compute deltas
 
         if scale < 1.0:
             pose_phone = interpolate_transforms(
@@ -201,6 +203,8 @@ class AndroidPhone(BasePhone, Teleoperator):
         delta_y_control_pad = control_pad_y - self._y_control_pad_init
 
         ##: Convert to LeRobot data
+        # See `lerobot_processors.py` for how this data is used. We tried as much as possible
+        # to stick to LeRobot's original phone teleop implementation.
 
         rot_quaternion_wxyz = t3d.quaternions.mat2quat(delta_orientation)
         rot_quaternion_xyzw = TF_WXYZ_TO_XYZW @ rot_quaternion_wxyz

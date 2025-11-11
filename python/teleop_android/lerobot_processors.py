@@ -1,3 +1,5 @@
+# REFS: https://github.com/huggingface/lerobot/blob/main/src/lerobot/teleoperators/phone/phone_processor.py
+
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -24,12 +26,6 @@ from .lerobot_utils import (
 class MapPhoneActionToRobotAction(RobotActionProcessorStep):
     """
     Maps calibrated phone pose actions to standardized robot action inputs.
-
-    This processor step acts as a bridge between the phone teleoperator's output
-    and the robot's expected action format. It remaps the phone's 6-DoF pose
-    (position and rotation) to the robot's target end-effector pose, applying
-    necessary axis inversions and swaps. It also interprets platform-specific
-    button presses to generate a gripper command.
     """
 
     _enabled_prev: bool = field(default=False, init=False, repr=False)
@@ -47,7 +43,6 @@ class MapPhoneActionToRobotAction(RobotActionProcessorStep):
         Raises:
             ValueError: If 'pos' or 'rot' keys are missing from the input action.
         """
-        # Pop them from the action
         enabled = bool(action.pop("phone.enabled"))
         # Position delta for the phone
         pos = action.pop("phone.pos")
@@ -130,6 +125,8 @@ class WristJoints(RobotActionProcessorStep):
 
     For wrist flex, compensates for lower arm rotation to keep the wrist flex
     angle relative to the world constant unless the phone's pitch changes.
+
+    REFS: EEReferenceAndDelta in https://github.com/huggingface/lerobot/blob/main/src/lerobot/robots/so100_follower/robot_kinematic_processor.py
     """
 
     motor_names: list[str]
@@ -267,7 +264,12 @@ class WristJoints(RobotActionProcessorStep):
 @dataclass
 class GripperToJoint(RobotActionProcessorStep):
     """
-    TODO:
+    Maps gripper control pad deltas to absolute gripper joint positions.
+
+    Uses latched reference mode to maintain a reference position that is updated
+    when enabled, and converts control pad deltas to gripper position changes.
+
+    REFS: EEReferenceAndDelta and GripperVelocityToJoint in https://github.com/huggingface/lerobot/blob/main/src/lerobot/robots/so100_follower/robot_kinematic_processor.py
     """
 
     clip_min: float = 0.0
