@@ -1,12 +1,12 @@
 # Teleop SO101 arm from Android app
 
-I wasn't happy with the [LeRobot phone teleoperation setup](https://huggingface.co/docs/lerobot/en/phone_teleop) for my SO101 robot arm, so I've built my own.
+An Android-based teleoperation system for the SO101 robot arm with a more intuitive control interface. Built as an alternative to the [LeRobot phone teleoperation setup](https://huggingface.co/docs/lerobot/en/phone_teleop).
 
 [DEMO VIDEO and APP INTERFACE OVERVIEW]()
 
 <img src="assets/demo.gif" width="320" alt="Teleop Android app screenshot" />
 
-**Highlights**:
+### Highlights
 
 - Intuitive control:
   - phone's xyz position controls the lower arm tip position
@@ -18,7 +18,7 @@ I wasn't happy with the [LeRobot phone teleoperation setup](https://huggingface.
 - WebSocket server for communication from the Android app to a Python server
 - Integration with LeRobot, both in simulation and hardware
 
-This project includes:
+### Project overview
 
 - `python/`: A Python library and examples to teleoperate a SO101 arm with a phone, either in simulation or on hardware. The Python library runs a server to receive data from the Android app over WebSocket, and implements a few LeRobot processing steps.
 - `android/`: An Android app that sends the phone position and orientation (estimated with ARCore) to the Python server.
