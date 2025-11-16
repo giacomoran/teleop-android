@@ -25,6 +25,7 @@ from lerobot.robots.so100_follower.robot_kinematic_processor import (
     InverseKinematicsEEToJoints,
 )
 from lerobot.teleoperators.phone.config_phone import PhoneConfig, PhoneOS
+from lerobot.utils.robot_utils import busy_wait
 from rerun import blueprint as rrb
 from teleop_android import (
     AndroidPhone,
@@ -262,5 +263,4 @@ while True:
     robot_obs = joint_action
 
     step += 1
-    # NOTE: We use `time.sleep` instead of LeRobot's `busy_wait`, because the latter kills perf
-    time.sleep(max(1.0 / FPS - (time.perf_counter() - t0), 0.0))
+    busy_wait(max(1.0 / FPS - (time.perf_counter() - t0), 0.0))

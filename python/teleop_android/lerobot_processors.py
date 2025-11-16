@@ -3,7 +3,6 @@
 from dataclasses import dataclass, field
 
 import numpy as np
-import transforms3d as t3d
 from lerobot.configs.types import FeatureType, PipelineFeatureType, PolicyFeature
 from lerobot.model.kinematics import RobotKinematics
 from lerobot.processor import (
@@ -15,7 +14,7 @@ from lerobot.processor import (
 from lerobot.utils.rotation import Rotation
 
 from .lerobot_utils import (
-    TF_XYZW_TO_WXYZ,
+    extract_pitch_roll_from_matrix,
 )
 
 #: MapPhoneActionToRobotAction
@@ -46,20 +45,19 @@ class MapPhoneActionToRobotAction(RobotActionProcessorStep):
         enabled = bool(action.pop("phone.enabled"))
         # Position delta for the phone
         pos = action.pop("phone.pos")
-        # Orientation delta for the phone
+        # Orientation delta for the phone (still needed for backward compatibility, but pitch/roll come from raw_inputs)
         rot = action.pop("phone.rot")
         inputs = action.pop("phone.raw_inputs")
 
         if pos is None or rot is None:
             raise ValueError("pos and rot must be present in action")
 
-        rot_quaternion_xyzw = rot.as_quat()
-        rot_quaternion_wxyz = TF_XYZW_TO_WXYZ @ rot_quaternion_xyzw
-        delta_orientation_euler = np.degrees(
-            np.array(t3d.euler.quat2euler(rot_quaternion_wxyz, axes="sxyz"))
-        )
-        rotvec_identity = Rotation.from_matrix(np.eye(3)).as_rotvec()
+        # Extract pitch and roll deltas directly from raw_inputs (avoids gimbal lock)
+        # These were computed as angle differences in lerobot_phone.py
+        delta_rad_pitch_phone = float(inputs.get("delta_rad_pitch_phone", 0.0))
+        delta_rad_roll_phone = float(inputs.get("delta_rad_roll_phone", 0.0))
 
+        rotvec_identity = Rotation.from_matrix(np.eye(3)).as_rotvec()
         delta_y_control_pad = float(inputs.get("delta_y_control_pad", 0.0))
 
         action["enabled"] = enabled
@@ -77,8 +75,9 @@ class MapPhoneActionToRobotAction(RobotActionProcessorStep):
         # an additional copy that is popped by WristJoints.
         # Note that wrist roll is flipped.
         action["wrist_enabled"] = enabled
-        action["wrist_delta_degrees_flex"] = delta_orientation_euler[1]
-        action["wrist_delta_degrees_roll"] = -delta_orientation_euler[0]
+        # Use pitch and roll deltas extracted directly from poses (avoids gimbal lock)
+        action["wrist_delta_degrees_flex"] = np.degrees(delta_rad_pitch_phone)
+        action["wrist_delta_degrees_roll"] = -np.degrees(delta_rad_roll_phone)
         # Same as "enabled", store an additional copy for GripperToJoint
         action["gripper_enabled"] = enabled
         action["gripper_delta_y_control_pad"] = delta_y_control_pad if enabled else 0.0
@@ -226,10 +225,11 @@ class WristJoints(RobotActionProcessorStep):
         return pose_matrix
 
     def _extract_pitch(self, pose_matrix: np.ndarray) -> float:
-        """Extract pitch angle (rotation around y-axis) from pose matrix in degrees."""
-        euler_rad = t3d.euler.mat2euler(pose_matrix[:3, :3], axes="sxyz")
-        # TODO: Figure out why we need to flip the sign here
-        pitch_rad = -euler_rad[1]
+        """Extract pitch angle (rotation around y-axis) from pose matrix in degrees.
+
+        Uses the same extraction method as lerobot_phone.py to avoid gimbal lock.
+        """
+        pitch_rad, _ = extract_pitch_roll_from_matrix(pose_matrix[:3, :3])
         return np.degrees(pitch_rad)
 
     def reset(self):

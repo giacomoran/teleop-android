@@ -108,3 +108,25 @@ def interpolate_transforms(T1, T2, alpha):
     T_interp[:3, 3] = t_interp
 
     return T_interp
+
+
+def extract_pitch_roll_from_matrix(R):
+    """
+    Extract pitch and roll angles from a 3x3 rotation matrix using ZYX convention.
+
+    This method avoids Euler angle conversion that can cause gimbal lock.
+    Uses the same convention as are_close: ZYX (yaw around Z, pitch around Y, roll around X).
+
+    Args:
+        R (np.ndarray): 3x3 rotation matrix
+
+    Returns:
+        tuple: (pitch_rad, roll_rad) in radians
+    """
+    # ZYX decomposition (matches are_close convention)
+    # pitch = rotation around Y axis
+    pitch_rad = math.asin(-np.clip(R[2, 0], -1.0, 1.0))
+    # roll = rotation around X axis
+    roll_rad = math.atan2(R[2, 1], R[2, 2])
+
+    return pitch_rad, roll_rad
